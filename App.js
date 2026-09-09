@@ -69,7 +69,7 @@ export default function App() {
   };
 
   const evaluateExpression = () => {
-    if (!display.trim()) return null;
+    if (!display.trim()) return 0; // Se estiver vazio, assume 0
     try {
       const formattedExpr = display
         .replace(/,/g, '.')
@@ -85,7 +85,8 @@ export default function App() {
   };
 
   const handleSaveCalculation = (type = 'ADD') => {
-    const calculatedValue = evaluateExpression();
+    let calculatedValue = evaluateExpression();
+
     if (calculatedValue === null) {
       Alert.alert('Erro', 'Expressão matemática inválida');
       return;
@@ -97,7 +98,7 @@ export default function App() {
       id: Date.now().toString(),
       value: Math.abs(calculatedValue),
       type: type,
-      note: note.trim() || 'Sem observação',
+      note: note.trim() || 'Sem observação/descrição',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       date: new Date().toLocaleDateString('pt-BR')
     };
@@ -115,10 +116,9 @@ export default function App() {
     setHistoryGroups(updatedGroups);
     saveData(updatedGroups);
 
-    const formattedResult = calculatedValue.toString().replace('.', ',');
-    setDisplay(formattedResult);
+    setDisplay('');
     setNote('');
-    Alert.alert('Salvo!', `Cálculo (${type === 'ADD' ? '+' : '-'}) registrado com sucesso.`);
+    Alert.alert('Salvo!', `Lançamento registrado com sucesso.`);
   };
 
   const getGroupTotal = (group) => {
@@ -136,7 +136,7 @@ export default function App() {
   };
 
   const pullSpecificValue = (value) => {
-    setDisplay(value.toString().replace('.', ','));
+    setDisplay(value !== 0 ? value.toString().replace('.', ',') : '');
     setActiveTab('calc');
   };
 
@@ -191,7 +191,7 @@ export default function App() {
   };
 
   const handleSaveEdit = () => {
-    const parsedValue = parseFloat(editValue.replace(',', '.'));
+    const parsedValue = editValue.trim() === '' ? 0 : parseFloat(editValue.replace(',', '.'));
     if (isNaN(parsedValue)) {
       Alert.alert('Erro', 'Digite um valor numérico válido');
       return;
@@ -205,7 +205,7 @@ export default function App() {
               ...item,
               value: Math.abs(parsedValue),
               type: editType,
-              note: editNote.trim() || 'Sem observação'
+              note: editNote.trim() || 'Sem observação/descrição'
             };
           }
           return item;
@@ -271,13 +271,15 @@ export default function App() {
             </Text>
           </View>
 
-          {/* Campo de Observação */}
+          {/* Campo de Observação Multilinha */}
           <TextInput
-            style={styles.noteInput}
-            placeholder="Observação (ex: Peça A, Serviço)..."
+            style={[styles.noteInput, { minHeight: 65, textAlignVertical: 'top' }]}
+            placeholder={'Observação / Itens e quantidades:\nEx: 2x Peça A\n1x Óleo de motor...'}
             placeholderTextColor="#5A5A72"
             value={note}
             onChangeText={setNote}
+            multiline={true}
+            numberOfLines={3}
           />
 
           {/* Display da Calculadora */}
@@ -286,7 +288,7 @@ export default function App() {
               style={styles.displayText}
               value={display}
               onChangeText={setDisplay}
-              placeholder="0"
+              placeholder="0 (opcional)"
               placeholderTextColor="#2E2E3A"
               keyboardType="numeric"
             />
@@ -298,13 +300,13 @@ export default function App() {
               style={[styles.actionBtn, styles.addBtn]}
               onPress={() => handleSaveCalculation('ADD')}
             >
-              <Text style={styles.actionBtnText}>+ Somar no Histórico</Text>
+              <Text style={styles.actionBtnText}>+ Somar / Lançar</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.subBtn]}
               onPress={() => handleSaveCalculation('SUB')}
             >
-              <Text style={styles.actionBtnText}>- Subtrair no Histórico</Text>
+              <Text style={styles.actionBtnText}>- Subtrair / Lançar</Text>
             </TouchableOpacity>
           </View>
 
@@ -420,35 +422,44 @@ export default function App() {
                   <Text style={styles.emptyText}>Nenhum cálculo neste histórico ainda.</Text>
                 </View>
               }
-              renderItem={({ item }) => (
-                <View style={styles.itemCard}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={[styles.itemType, item.type === 'SUB' ? styles.subText : styles.addText]}>
-                        {item.type === 'SUB' ? '-' : '+'} R$ {item.value.toString().replace('.', ',')}
-                      </Text>
-                      <Text style={styles.itemDate}>• {item.timestamp}</Text>
+              renderItem={({ item }) => {
+                const isZeroValue = item.value === 0;
+                return (
+                  <View style={styles.itemCard}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {isZeroValue ? (
+                          <Text style={styles.zeroValueText}>[Sem valor]</Text>
+                        ) : (
+                          <Text style={[styles.itemType, item.type === 'SUB' ? styles.subText : styles.addText]}>
+                            {item.type === 'SUB' ? '-' : '+'} R$ {item.value.toString().replace('.', ',')}
+                          </Text>
+                        )}
+                        <Text style={styles.itemDate}> • {item.timestamp}</Text>
+                      </View>
+                      <Text style={styles.itemNote}>{item.note}</Text>
                     </View>
-                    <Text style={styles.itemNote}>{item.note}</Text>
-                  </View>
 
-                  <View style={styles.itemActions}>
-                    <TouchableOpacity
-                      style={styles.editBtn}
-                      onPress={() => openEditModal(item)}
-                    >
-                      <Text style={styles.editBtnText}>Editar</Text>
-                    </TouchableOpacity>
+                    <View style={styles.itemActions}>
+                      <TouchableOpacity
+                        style={styles.editBtn}
+                        onPress={() => openEditModal(item)}
+                      >
+                        <Text style={styles.editBtnText}>Editar</Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.loadBtn}
-                      onPress={() => pullSpecificValue(item.value)}
-                    >
-                      <Text style={styles.loadBtnText}>Usar</Text>
-                    </TouchableOpacity>
+                      {!isZeroValue && (
+                        <TouchableOpacity
+                          style={styles.loadBtn}
+                          onPress={() => pullSpecificValue(item.value)}
+                        >
+                          <Text style={styles.loadBtnText}>Usar</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
-                </View>
-              )}
+                );
+              }}
             />
           </View>
         </View>
@@ -506,19 +517,23 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.label}>Valor:</Text>
+            <Text style={styles.label}>Valor (deixe vazio se não souber):</Text>
             <TextInput
               style={styles.modalInput}
               keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor="#5A5A72"
               value={editValue}
               onChangeText={setEditValue}
             />
 
-            <Text style={styles.label}>Observação:</Text>
+            <Text style={styles.label}>Observação / Itens:</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { minHeight: 70, textAlignVertical: 'top' }]}
               value={editNote}
               onChangeText={setEditNote}
+              multiline={true}
+              numberOfLines={3}
             />
 
             <View style={styles.modalButtons}>
@@ -562,9 +577,9 @@ const styles = StyleSheet.create({
   infoBadgeText: { color: '#8E8EA0', fontSize: 12 },
   infoBadgeHighlight: { color: '#6C5CE7', fontWeight: 'bold' },
   
-  noteInput: { backgroundColor: '#16161E', color: '#FFF', padding: 14, borderRadius: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
-  displayContainer: { backgroundColor: '#16161E', padding: 20, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#232330', minHeight: 90, justifyContent: 'center' },
-  displayText: { color: '#FFF', fontSize: 38, textAlign: 'right', fontWeight: '600' },
+  noteInput: { backgroundColor: '#16161E', color: '#FFF', padding: 12, borderRadius: 12, fontSize: 13, marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
+  displayContainer: { backgroundColor: '#16161E', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#232330', minHeight: 75, justifyContent: 'center' },
+  displayText: { color: '#FFF', fontSize: 34, textAlign: 'right', fontWeight: '600' },
 
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   actionBtn: { width: '48%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
@@ -574,7 +589,7 @@ const styles = StyleSheet.create({
 
   // Teclado
   keypad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  button: { width: '22%', backgroundColor: '#16161E', paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
+  button: { width: '22%', backgroundColor: '#16161E', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
   buttonText: { color: '#E4E4E8', fontSize: 22, fontWeight: '500' },
   opButton: { backgroundColor: '#232330' },
   opButtonText: { color: '#6C5CE7', fontWeight: 'bold' },
@@ -604,14 +619,15 @@ const styles = StyleSheet.create({
   historyTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   deleteGroupText: { color: '#EF4444', fontSize: 12 },
 
-  itemCard: { backgroundColor: '#16161E', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#232330' },
+  itemCard: { backgroundColor: '#16161E', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, borderWidth: 1, borderColor: '#232330' },
   itemType: { fontSize: 16, fontWeight: 'bold' },
+  zeroValueText: { fontSize: 14, fontWeight: 'bold', color: '#8E8EA0' },
   addText: { color: '#10B981' },
   subText: { color: '#EF4444' },
   itemDate: { color: '#5A5A72', fontSize: 11 },
-  itemNote: { color: '#A0A0B2', fontSize: 13, marginTop: 2 },
+  itemNote: { color: '#A0A0B2', fontSize: 13, marginTop: 4, lineHeight: 18 },
   
-  itemActions: { flexDirection: 'row' },
+  itemActions: { flexDirection: 'row', marginLeft: 8 },
   editBtn: { backgroundColor: '#232330', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 6 },
   editBtnText: { color: '#8E8EA0', fontSize: 11, fontWeight: '600' },
   loadBtn: { backgroundColor: '#6C5CE7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
