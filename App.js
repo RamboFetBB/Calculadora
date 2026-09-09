@@ -360,11 +360,13 @@ export default function App() {
   const handleSendWhatsApp = (phone) => {
     const jsonPayload = JSON.stringify(shoppingList, null, 2);
     
-    // Mensagem com instruções simples e o bloco de código fácil de copiar de uma vez só
+    // Quebras de linha estritas (\n) antes e depois das crases para ativar o bloco cinza no WhatsApp
     const messageText = 
       `🛒 *Lista de Compras*\n\n` +
-      `Para importar no aplicativo, pressione e segure o bloco abaixo e clique em *Copiar*:\n\n` +
-      `\`\`\`\n${jsonPayload}\n\`\`\``;
+      `Para importar no aplicativo, toque e segure o bloco abaixo para copiar:\n\n` +
+      `\`\`\`\n` +
+      `${jsonPayload}\n` +
+      `\`\`\``;
 
     const message = encodeURIComponent(messageText);
     const url = `https://api.whatsapp.com/send?phone=55${phone}&text=${message}`;
