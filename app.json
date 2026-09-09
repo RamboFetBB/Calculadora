@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Calculadora",
+    "slug": "calculadora-historico",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.rambofetbb.calculadora"
+    }
+  }
+}
