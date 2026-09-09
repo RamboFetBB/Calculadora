@@ -359,7 +359,14 @@ export default function App() {
 
   const handleSendWhatsApp = (phone) => {
     const jsonPayload = JSON.stringify(shoppingList, null, 2);
-    const message = encodeURIComponent(`*Lista de Compras (JSON):*\n\`\`\`json\n${jsonPayload}\n\`\`\``);
+    
+    // Mensagem com instruções simples e o bloco de código fácil de copiar de uma vez só
+    const messageText = 
+      `🛒 *Lista de Compras*\n\n` +
+      `Para importar no aplicativo, pressione e segure o bloco abaixo e clique em *Copiar*:\n\n` +
+      `\`\`\`\n${jsonPayload}\n\`\`\``;
+
+    const message = encodeURIComponent(messageText);
     const url = `https://api.whatsapp.com/send?phone=55${phone}&text=${message}`;
 
     Linking.openURL(url).catch(() => {
@@ -585,11 +592,11 @@ export default function App() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Receber Lista de Compras</Text>
-            <Text style={[styles.label, { color: theme.subText }]}>Cole o código/JSON recebido do WhatsApp abaixo:</Text>
+            <Text style={[styles.label, { color: theme.subText }]}>Cole o código recebido do WhatsApp abaixo:</Text>
             
             <TextInput
               style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border, minHeight: 90, textAlignVertical: 'top' }]}
-              placeholder={'Cole aqui o texto JSON...'}
+              placeholder={'Cole aqui a lista copiada...'}
               placeholderTextColor={theme.subText}
               value={importJsonInput}
               onChangeText={setImportJsonInput}
