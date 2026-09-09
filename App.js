@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('calc'); // 'calc' | 'shopping' | 'history'
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   // States Calculadora & Históricos
   const [display, setDisplay] = useState('');
@@ -28,20 +29,25 @@ export default function App() {
   const [itemName, setItemName] = useState('');
   const [itemQty, setItemQty] = useState('1');
   const [itemPrice, setItemPrice] = useState('');
+  const [importJsonInput, setImportJsonInput] = useState('');
 
-  // Modais
+  // Modais de Histórico
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
 
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
+  const [editCalcModalVisible, setEditCalcModalVisible] = useState(false);
+  const [editingCalcItem, setEditingCalcItem] = useState(null);
+  const [editCalcValue, setEditCalcValue] = useState('');
+  const [editCalcNote, setEditCalcNote] = useState('');
+  const [editCalcType, setEditCalcType] = useState('ADD');
 
-  // Modal Editar Item da Lista de Compras
+  // Modais da Lista de Compras
   const [editShopModalVisible, setEditShopModalVisible] = useState(false);
   const [editingShopItem, setEditingShopItem] = useState(null);
   const [editShopName, setEditShopName] = useState('');
   const [editShopQty, setEditShopQty] = useState('');
   const [editShopPrice, setEditShopPrice] = useState('');
+  const [receiveModalVisible, setReceiveModalVisible] = useState(false);
 
   // Modal Escolha de Contato WhatsApp
   const [shareModalVisible, setShareModalVisible] = useState(false);
@@ -52,36 +58,57 @@ export default function App() {
 
   const loadData = async () => {
     try {
+      const savedTheme = await AsyncStorage.getItem('@app_theme_v1');
+      if (savedTheme !== null) setIsDarkMode(savedTheme === 'dark');
+
       const savedGroups = await AsyncStorage.getItem('@calc_groups_v5');
       if (savedGroups) {
         const parsed = JSON.parse(savedGroups);
         setHistoryGroups(parsed);
         if (parsed.length > 0) setActiveGroupId(parsed[0].id);
       } else {
-        const defaultGroup = { id: 'default', name: 'Geral / Sem Nome', items: [] };
+        const defaultGroup = { id: 'default', name: 'Geral', items: [] };
         setHistoryGroups([defaultGroup]);
         setActiveGroupId('default');
       }
 
       const savedShop = await AsyncStorage.getItem('@shopping_list_v1');
-      if (savedShop) {
-        setShoppingList(JSON.parse(savedShop));
-      }
+      if (savedShop) setShoppingList(JSON.parse(savedShop));
     } catch (e) {
       Alert.alert('Erro', 'Falha ao carregar dados salvos');
     }
   };
 
-  const saveData = async (groups, shopList) => {
+  const saveData = async (groups, shopList, themeBool) => {
     try {
       if (groups) await AsyncStorage.setItem('@calc_groups_v5', JSON.stringify(groups));
       if (shopList) await AsyncStorage.setItem('@shopping_list_v1', JSON.stringify(shopList));
+      if (themeBool !== undefined) await AsyncStorage.setItem('@app_theme_v1', themeBool ? 'dark' : 'light');
     } catch (e) {
       Alert.alert('Erro', 'Falha ao salvar dados');
     }
   };
 
-  // --- LÓGICA CALCULADORA & HISTÓRICO ---
+  const toggleTheme = () => {
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    saveData(null, null, newTheme);
+  };
+
+  // Dynamic Theme Colors
+  const theme = {
+    bg: isDarkMode ? '#0D0D12' : '#F4F5F9',
+    card: isDarkMode ? '#16161E' : '#FFFFFF',
+    border: isDarkMode ? '#232330' : '#E2E4ED',
+    text: isDarkMode ? '#FFFFFF' : '#1A1A24',
+    subText: isDarkMode ? '#8E8EA0' : '#6E6E82',
+    inputBg: isDarkMode ? '#16161E' : '#FFFFFF',
+    primary: '#6C5CE7',
+    add: '#10B981',
+    sub: '#EF4444',
+  };
+
+  // --- CALCULADORA ---
   const handlePress = (value) => setDisplay((prev) => prev + value);
   const clearDisplay = () => {
     setDisplay('');
@@ -131,69 +158,116 @@ export default function App() {
     Alert.alert('Salvo!', 'Lançamento salvo no histórico.');
   };
 
-  // IMPORTAÇÃO DE JSON NA CALCULADORA
-  const handleImportJSONFromNote = () => {
-    if (!note.trim()) {
-      Alert.alert('Aviso', 'Cole o texto JSON do WhatsApp no campo de observação acima antes de importar.');
+  // --- HISTÓRICOS ---
+  const handleCreateGroup = () => {
+    if (!newGroupName.trim()) {
+      Alert.alert('Aviso', 'Digite um nome para o histórico');
+      return;
+    }
+    const newGroup = { id: Date.now().toString(), name: newGroupName.trim(), items: [] };
+    const updated = [...historyGroups, newGroup];
+    setHistoryGroups(updated);
+    setActiveGroupId(newGroup.id);
+    saveData(updated, null);
+    setNewGroupName('');
+    setGroupModalVisible(false);
+  };
+
+  const handleDeleteGroup = (groupId) => {
+    if (historyGroups.length <= 1) {
+      Alert.alert('Aviso', 'Você precisa ter pelo menos um histórico ativo.');
+      return;
+    }
+    Alert.alert('Excluir Histórico', 'Deseja remover este histórico e todos os lançamentos dele?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: () => {
+          const updated = historyGroups.filter((g) => g.id !== groupId);
+          setHistoryGroups(updated);
+          setActiveGroupId(updated[0].id);
+          saveData(updated, null);
+        }
+      }
+    ]);
+  };
+
+  const openEditCalcModal = (item) => {
+    setEditingCalcItem(item);
+    setEditCalcValue(item.value.toString().replace('.', ','));
+    setEditCalcNote(item.note);
+    setEditCalcType(item.type);
+    setEditCalcModalVisible(true);
+  };
+
+  const handleSaveEditCalcItem = () => {
+    const valNum = parseFloat(editCalcValue.replace(',', '.'));
+    if (isNaN(valNum)) {
+      Alert.alert('Erro', 'Digite um valor válido');
       return;
     }
 
-    try {
-      // Limpa possíveis formatações do WhatsApp (como blocos de código ``` )
-      const cleanText = note.replace(/```json/g, '').replace(/```/g, '').trim();
-      const importedList = JSON.parse(cleanText);
-
-      if (!Array.isArray(importedList)) {
-        Alert.alert('Erro', 'O texto colar não é uma lista válida de compras.');
-        return;
+    const updatedGroups = historyGroups.map((group) => {
+      if (group.id === activeGroupId) {
+        const updatedItems = group.items.map((i) => {
+          if (i.id === editingCalcItem.id) {
+            return {
+              ...i,
+              value: Math.abs(valNum),
+              note: editCalcNote.trim() || 'Sem observação/descrição',
+              type: editCalcType
+            };
+          }
+          return i;
+        });
+        return { ...group, items: updatedItems };
       }
+      return group;
+    });
 
-      // Adiciona IDs novos para evitar conflitos no armazenamento
-      const formattedList = importedList.map((item, index) => ({
-        id: (Date.now() + index).toString(),
-        name: item.name || 'Item sem nome',
-        qty: Number(item.qty) || 1,
-        price: Number(item.price) || 0
-      }));
+    setHistoryGroups(updatedGroups);
+    saveData(updatedGroups, null);
+    setEditCalcModalVisible(false);
+    setEditingCalcItem(null);
+  };
 
-      const updatedList = [...formattedList, ...shoppingList];
-      setShoppingList(updatedList);
-      saveData(null, updatedList);
-
-      setNote('');
-      Alert.alert('Sucesso!', `${formattedList.length} itens foram importados para a sua Lista de Compras.`, [
-        { text: 'Ir para a Lista', onPress: () => setActiveTab('shopping') },
-        { text: 'OK' }
-      ]);
-    } catch (e) {
-      Alert.alert('Erro ao Importar', 'O texto copiado não está em formato JSON válido.');
-    }
+  const handleDeleteCalcItem = (itemId) => {
+    Alert.alert('Excluir Lançamento', 'Deseja remover este item do histórico?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: () => {
+          const updatedGroups = historyGroups.map((group) => {
+            if (group.id === activeGroupId) {
+              return { ...group, items: group.items.filter((i) => i.id !== itemId) };
+            }
+            return group;
+          });
+          setHistoryGroups(updatedGroups);
+          saveData(updatedGroups, null);
+          setEditCalcModalVisible(false);
+        }
+      }
+    ]);
   };
 
   const getGroupTotal = (group) => {
     if (!group || !group.items) return 0;
-    return group.items.reduce((acc, item) => {
-      return item.type === 'SUB' ? acc - item.value : acc + item.value;
-    }, 0);
+    return group.items.reduce((acc, item) => (item.type === 'SUB' ? acc - item.value : acc + item.value), 0);
   };
 
-  // --- LÓGICA LISTA DE COMPRAS ---
+  // --- LISTA DE COMPRAS ---
   const handleAddShoppingItem = () => {
     if (!itemName.trim()) {
       Alert.alert('Aviso', 'Digite o nome do item');
       return;
     }
-
     const qtyNum = parseFloat(itemQty.replace(',', '.')) || 1;
     const priceNum = parseFloat(itemPrice.replace(',', '.')) || 0;
 
-    const newItem = {
-      id: Date.now().toString(),
-      name: itemName.trim(),
-      qty: qtyNum,
-      price: priceNum
-    };
-
+    const newItem = { id: Date.now().toString(), name: itemName.trim(), qty: qtyNum, price: priceNum };
     const updatedList = [newItem, ...shoppingList];
     setShoppingList(updatedList);
     saveData(null, updatedList);
@@ -204,22 +278,18 @@ export default function App() {
   };
 
   const handleConfirmDeleteShopItem = (item) => {
-    Alert.alert(
-      'Confirmar Exclusão',
-      `Deseja realmente remover "${item.name}" da lista?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: () => {
-            const updated = shoppingList.filter((i) => i.id !== item.id);
-            setShoppingList(updated);
-            saveData(null, updated);
-          }
+    Alert.alert('Confirmar Exclusão', `Deseja realmente remover "${item.name}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: () => {
+          const updated = shoppingList.filter((i) => i.id !== item.id);
+          setShoppingList(updated);
+          saveData(null, updated);
         }
-      ]
-    );
+      }
+    ]);
   };
 
   const openEditShopModal = (item) => {
@@ -235,18 +305,12 @@ export default function App() {
       Alert.alert('Aviso', 'Digite o nome do item');
       return;
     }
-
     const qtyNum = parseFloat(editShopQty.replace(',', '.')) || 1;
     const priceNum = parseFloat(editShopPrice.replace(',', '.')) || 0;
 
     const updatedList = shoppingList.map((item) => {
       if (item.id === editingShopItem.id) {
-        return {
-          ...item,
-          name: editShopName.trim(),
-          qty: qtyNum,
-          price: priceNum
-        };
+        return { ...item, name: editShopName.trim(), qty: qtyNum, price: priceNum };
       }
       return item;
     });
@@ -257,25 +321,50 @@ export default function App() {
     setEditingShopItem(null);
   };
 
-  const getShoppingTotal = () => {
-    return shoppingList.reduce((acc, item) => acc + item.qty * item.price, 0);
+  const handleImportJSONText = () => {
+    if (!importJsonInput.trim()) {
+      Alert.alert('Aviso', 'Cole o texto da lista recebida antes de confirmar.');
+      return;
+    }
+
+    try {
+      const cleanText = importJsonInput.replace(/```json/g, '').replace(/```/g, '').trim();
+      const importedList = JSON.parse(cleanText);
+
+      if (!Array.isArray(importedList)) {
+        Alert.alert('Erro', 'O texto copiado não é uma lista de compras válida.');
+        return;
+      }
+
+      const formattedList = importedList.map((item, index) => ({
+        id: (Date.now() + index).toString(),
+        name: item.name || 'Item sem nome',
+        qty: Number(item.qty) || 1,
+        price: Number(item.price) || 0
+      }));
+
+      const updatedList = [...formattedList, ...shoppingList];
+      setShoppingList(updatedList);
+      saveData(null, updatedList);
+
+      setImportJsonInput('');
+      setReceiveModalVisible(false);
+      Alert.alert('Sucesso!', `${formattedList.length} itens foram adicionados à sua lista.`);
+    } catch (e) {
+      Alert.alert('Erro ao Importar', 'O texto copiado não é um formato válido.');
+    }
   };
 
-  // Envio WhatsApp em formato JSON
+  const getShoppingTotal = () => shoppingList.reduce((acc, item) => acc + item.qty * item.price, 0);
+
   const handleSendWhatsApp = (phone) => {
     const jsonPayload = JSON.stringify(shoppingList, null, 2);
     const message = encodeURIComponent(`*Lista de Compras (JSON):*\n\`\`\`json\n${jsonPayload}\n\`\`\``);
-    const url = `whatsapp://send?phone=55${phone}&text=${message}`;
+    const url = `https://api.whatsapp.com/send?phone=55${phone}&text=${message}`;
 
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          Alert.alert('Erro', 'WhatsApp não instalado no dispositivo');
-        }
-      })
-      .catch(() => Alert.alert('Erro', 'Não foi possível abrir o WhatsApp'));
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Erro', 'Não foi possível abrir o WhatsApp');
+    });
 
     setShareModalVisible(false);
   };
@@ -283,78 +372,55 @@ export default function App() {
   const activeGroup = historyGroups.find((g) => g.id === activeGroupId) || historyGroups[0];
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D0D12" />
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.bg} />
 
-      {/* Navegação Topo (3 Abas) */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'calc' && styles.activeTabButton]}
-          onPress={() => setActiveTab('calc')}
-        >
-          <Text style={[styles.tabText, activeTab === 'calc' && styles.activeTabText]}>
-            Calculadora
-          </Text>
-        </TouchableOpacity>
+      {/* Top Bar (Navegação + Alternador de Tema) */}
+      <View style={styles.topHeader}>
+        <View style={[styles.tabContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <TouchableOpacity style={[styles.tabButton, activeTab === 'calc' && { backgroundColor: theme.border }]} onPress={() => setActiveTab('calc')}>
+            <Text style={[styles.tabText, { color: activeTab === 'calc' ? theme.primary : theme.subText }]}>Calculadora</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tabButton, activeTab === 'shopping' && { backgroundColor: theme.border }]} onPress={() => setActiveTab('shopping')}>
+            <Text style={[styles.tabText, { color: activeTab === 'shopping' ? theme.primary : theme.subText }]}>Compras</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tabButton, activeTab === 'history' && { backgroundColor: theme.border }]} onPress={() => setActiveTab('history')}>
+            <Text style={[styles.tabText, { color: activeTab === 'history' ? theme.primary : theme.subText }]}>Históricos</Text>
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'shopping' && styles.activeTabButton]}
-          onPress={() => setActiveTab('shopping')}
-        >
-          <Text style={[styles.tabText, activeTab === 'shopping' && styles.activeTabText]}>
-            Compras
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'history' && styles.activeTabButton]}
-          onPress={() => setActiveTab('history')}
-        >
-          <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>
-            Históricos
-          </Text>
+        <TouchableOpacity style={[styles.themeToggleBtn, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={toggleTheme}>
+          <Text style={{ fontSize: 16 }}>{isDarkMode ? '☀️' : '🌙'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* ABA 1: CALCULADORA */}
       {activeTab === 'calc' && (
         <ScrollView contentContainerStyle={styles.calcView} showsVerticalScrollIndicator={false}>
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoBadgeText}>
-              Lançando em: <Text style={styles.infoBadgeHighlight}>{activeGroup?.name || 'Geral'}</Text>
+          <View style={[styles.infoBadge, { backgroundColor: theme.card }]}>
+            <Text style={[styles.infoBadgeText, { color: theme.subText }]}>
+              Lançando em: <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{activeGroup?.name || 'Geral'}</Text>
             </Text>
           </View>
 
           <TextInput
-            style={[styles.noteInput, { minHeight: 65, textAlignVertical: 'top' }]}
-            placeholder={'Cole o JSON recebido no WhatsApp aqui ou digite uma observação...'}
-            placeholderTextColor="#5A5A72"
+            style={[styles.noteInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border, minHeight: 65, textAlignVertical: 'top' }]}
+            placeholder={'Digite uma observação/descrição para o lançamento...'}
+            placeholderTextColor={theme.subText}
             value={note}
             onChangeText={setNote}
             multiline={true}
           />
 
-          {/* Botão de Importar JSON */}
-          <TouchableOpacity style={styles.importJsonBtn} onPress={handleImportJSONFromNote}>
-            <Text style={styles.importJsonBtnText}>📥 Importar JSON para Lista de Compras</Text>
-          </TouchableOpacity>
-
-          <View style={styles.displayContainer}>
-            <TextInput
-              style={styles.displayText}
-              value={display}
-              onChangeText={setDisplay}
-              placeholder="0 (opcional)"
-              placeholderTextColor="#2E2E3A"
-              keyboardType="numeric"
-            />
+          <View style={[styles.displayContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <TextInput style={[styles.displayText, { color: theme.text }]} value={display} onChangeText={setDisplay} placeholder="0 (opcional)" placeholderTextColor={theme.subText} keyboardType="numeric" />
           </View>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionBtn, styles.addBtn]} onPress={() => handleSaveCalculation('ADD')}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.add }]} onPress={() => handleSaveCalculation('ADD')}>
               <Text style={styles.actionBtnText}>+ Somar / Lançar</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, styles.subBtn]} onPress={() => handleSaveCalculation('SUB')}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.sub }]} onPress={() => handleSaveCalculation('SUB')}>
               <Text style={styles.actionBtnText}>- Subtrair / Lançar</Text>
             </TouchableOpacity>
           </View>
@@ -368,7 +434,13 @@ export default function App() {
               return (
                 <TouchableOpacity
                   key={char}
-                  style={[styles.button, isOp && styles.opButton, isClear && styles.clearButton, isEqual && styles.equalButton]}
+                  style={[
+                    styles.button,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                    isOp && { backgroundColor: theme.border },
+                    isClear && { backgroundColor: isDarkMode ? '#2A171A' : '#FEE2E2' },
+                    isEqual && { backgroundColor: theme.primary }
+                  ]}
                   onPress={() => {
                     if (char === 'C') clearDisplay();
                     else if (char === '=') {
@@ -377,7 +449,7 @@ export default function App() {
                     } else handlePress(char);
                   }}
                 >
-                  <Text style={[styles.buttonText, isOp && styles.opButtonText, isClear && styles.clearButtonText, isEqual && styles.equalButtonText]}>
+                  <Text style={[styles.buttonText, { color: theme.text }, isOp && { color: theme.primary }, isClear && { color: theme.sub }, isEqual && { color: '#FFF' }]}>
                     {char}
                   </Text>
                 </TouchableOpacity>
@@ -390,43 +462,28 @@ export default function App() {
       {/* ABA 2: LISTA DE COMPRAS */}
       {activeTab === 'shopping' && (
         <View style={styles.historyView}>
-          <View style={styles.totalCard}>
-            <View>
-              <Text style={styles.totalLabel}>Total do Carrinho:</Text>
-              <Text style={styles.totalValue}>
-                R$ {getShoppingTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.shareBtn} onPress={() => setShareModalVisible(true)}>
-              <Text style={styles.shareBtnText}>Compartilhar JSON</Text>
+          <View style={styles.shoppingActionHeader}>
+            <TouchableOpacity style={[styles.importJsonBtn, { backgroundColor: theme.card, borderColor: theme.primary, flex: 1, marginRight: 6 }]} onPress={() => setReceiveModalVisible(true)}>
+              <Text style={{ color: theme.primary, fontWeight: 'bold', fontSize: 11, textAlign: 'center' }}>📥 Receber lista de compras</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.shareBtn, { flex: 1, marginLeft: 6 }]} onPress={() => setShareModalVisible(true)}>
+              <Text style={styles.shareBtnText}>Compartilhar lista de compras</Text>
             </TouchableOpacity>
           </View>
 
+          <View style={[styles.totalCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View>
+              <Text style={[styles.totalLabel, { color: theme.subText }]}>Total do Carrinho:</Text>
+              <Text style={[styles.totalValue, { color: theme.add }]}>R$ {getShoppingTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text>
+            </View>
+          </View>
+
           <View style={styles.shopForm}>
-            <TextInput
-              style={[styles.modalInput, { flex: 2, marginBottom: 0, marginRight: 6 }]}
-              placeholder="Item (ex: Leite)"
-              placeholderTextColor="#5A5A72"
-              value={itemName}
-              onChangeText={setItemName}
-            />
-            <TextInput
-              style={[styles.modalInput, { flex: 0.8, marginBottom: 0, marginRight: 6 }]}
-              placeholder="Qtd"
-              placeholderTextColor="#5A5A72"
-              keyboardType="numeric"
-              value={itemQty}
-              onChangeText={setItemQty}
-            />
-            <TextInput
-              style={[styles.modalInput, { flex: 1.2, marginBottom: 0, marginRight: 6 }]}
-              placeholder="R$ (opcional)"
-              placeholderTextColor="#5A5A72"
-              keyboardType="numeric"
-              value={itemPrice}
-              onChangeText={setItemPrice}
-            />
-            <TouchableOpacity style={styles.addShopItemBtn} onPress={handleAddShoppingItem}>
+            <TextInput style={[styles.modalInput, { flex: 2, marginBottom: 0, marginRight: 6, backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]} placeholder="Item (ex: Leite)" placeholderTextColor={theme.subText} value={itemName} onChangeText={setItemName} />
+            <TextInput style={[styles.modalInput, { flex: 0.8, marginBottom: 0, marginRight: 6, backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]} placeholder="Qtd" placeholderTextColor={theme.subText} keyboardType="numeric" value={itemQty} onChangeText={setItemQty} />
+            <TextInput style={[styles.modalInput, { flex: 1.2, marginBottom: 0, marginRight: 6, backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]} placeholder="R$ (opcional)" placeholderTextColor={theme.subText} keyboardType="numeric" value={itemPrice} onChangeText={setItemPrice} />
+            <TouchableOpacity style={[styles.addShopItemBtn, { backgroundColor: theme.add }]} onPress={handleAddShoppingItem}>
               <Text style={styles.btnText}>+</Text>
             </TouchableOpacity>
           </View>
@@ -435,30 +492,23 @@ export default function App() {
             data={shoppingList}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Sua lista de compras está vazia.</Text>
-              </View>
-            }
+            ListEmptyComponent={<View style={styles.emptyContainer}><Text style={{ color: theme.subText, fontStyle: 'italic' }}>Sua lista de compras está vazia.</Text></View>}
             renderItem={({ item }) => {
               const itemTotal = item.qty * item.price;
               return (
-                <View style={styles.itemCard}>
+                <View style={[styles.itemCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>
-                      {item.qty}x {item.name}
-                    </Text>
-                    <Text style={{ color: '#A0A0B2', fontSize: 12, marginTop: 2 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: 'bold' }}>{item.qty}x {item.name}</Text>
+                    <Text style={{ color: theme.subText, fontSize: 12, marginTop: 2 }}>
                       {item.price > 0 ? `R$ ${item.price.toString().replace('.', ',')} un. | Subtotal: R$ ${itemTotal.toFixed(2).replace('.', ',')}` : 'Valor não informado'}
                     </Text>
                   </View>
-
                   <View style={styles.itemActions}>
-                    <TouchableOpacity style={styles.editBtn} onPress={() => openEditShopModal(item)}>
-                      <Text style={styles.editBtnText}>Editar</Text>
+                    <TouchableOpacity style={[styles.editBtn, { backgroundColor: theme.border }]} onPress={() => openEditShopModal(item)}>
+                      <Text style={[styles.editBtnText, { color: theme.subText }]}>Editar</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.deleteBtn} onPress={() => handleConfirmDeleteShopItem(item)}>
-                      <Text style={styles.deleteBtnText}>Excluir</Text>
+                    <TouchableOpacity style={[styles.deleteBtn, { backgroundColor: isDarkMode ? '#2A171A' : '#FEE2E2' }]} onPress={() => handleConfirmDeleteShopItem(item)}>
+                      <Text style={[styles.deleteBtnText, { color: theme.sub }]}>Excluir</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -471,11 +521,11 @@ export default function App() {
       {/* ABA 3: HISTÓRICOS */}
       {activeTab === 'history' && (
         <View style={styles.historyView}>
-          <TouchableOpacity style={styles.createGroupBtn} onPress={() => setGroupModalVisible(true)}>
+          <TouchableOpacity style={[styles.createGroupBtn, { backgroundColor: theme.primary }]} onPress={() => setGroupModalVisible(true)}>
             <Text style={styles.createGroupBtnText}>+ Criar Novo Histórico Nomeado</Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionLabel}>Históricos disponíveis:</Text>
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>Históricos disponíveis:</Text>
           <View style={{ maxHeight: 42, marginBottom: 15 }}>
             <FlatList
               horizontal
@@ -486,23 +536,26 @@ export default function App() {
                 const isSelected = activeGroupId === item.id;
                 return (
                   <TouchableOpacity
-                    style={[styles.groupChip, isSelected && styles.activeGroupChip]}
+                    style={[styles.groupChip, { backgroundColor: theme.card, borderColor: theme.border }, isSelected && { backgroundColor: theme.primary, borderColor: theme.primary }]}
                     onPress={() => setActiveGroupId(item.id)}
                   >
-                    <Text style={[styles.chipText, isSelected && styles.activeChipText]}>{item.name}</Text>
+                    <Text style={[styles.chipText, { color: theme.subText }, isSelected && { color: '#FFF' }]}>{item.name}</Text>
                   </TouchableOpacity>
                 );
               }}
             />
           </View>
 
-          <View style={styles.totalCard}>
+          <View style={[styles.totalCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View>
-              <Text style={styles.totalLabel}>Total em {activeGroup?.name}:</Text>
-              <Text style={styles.totalValue}>
-                R$ {getGroupTotal(activeGroup).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </Text>
+              <Text style={[styles.totalLabel, { color: theme.subText }]}>Total em {activeGroup?.name}:</Text>
+              <Text style={[styles.totalValue, { color: theme.add }]}>R$ {getGroupTotal(activeGroup).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Text>
             </View>
+            {historyGroups.length > 1 && (
+              <TouchableOpacity style={[styles.deleteBtn, { backgroundColor: isDarkMode ? '#2A171A' : '#FEE2E2', paddingHorizontal: 12, paddingVertical: 8 }]} onPress={() => handleDeleteGroup(activeGroup.id)}>
+                <Text style={{ color: theme.sub, fontWeight: 'bold', fontSize: 11 }}>Excluir Histórico</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <FlatList
@@ -510,37 +563,103 @@ export default function App() {
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
-              <View style={styles.itemCard}>
+              <View style={[styles.itemCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.itemType, item.type === 'SUB' ? styles.subText : styles.addText]}>
+                  <Text style={[styles.itemType, item.type === 'SUB' ? { color: theme.sub } : { color: theme.add }]}>
                     {item.type === 'SUB' ? '-' : '+'} R$ {item.value.toString().replace('.', ',')}
                   </Text>
-                  <Text style={styles.itemNote}>{item.note}</Text>
+                  <Text style={{ color: theme.subText, fontSize: 13, marginTop: 4 }}>{item.note}</Text>
+                  <Text style={{ color: theme.subText, fontSize: 10, marginTop: 2 }}>{item.date} às {item.timestamp}</Text>
                 </View>
+                <TouchableOpacity style={[styles.editBtn, { backgroundColor: theme.border }]} onPress={() => openEditCalcModal(item)}>
+                  <Text style={[styles.editBtnText, { color: theme.subText }]}>Editar</Text>
+                </TouchableOpacity>
               </View>
             )}
           />
         </View>
       )}
 
+      {/* MODAL RECEBER LISTA DE COMPRAS */}
+      <Modal visible={receiveModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Receber Lista de Compras</Text>
+            <Text style={[styles.label, { color: theme.subText }]}>Cole o código/JSON recebido do WhatsApp abaixo:</Text>
+            
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border, minHeight: 90, textAlignVertical: 'top' }]}
+              placeholder={'Cole aqui o texto JSON...'}
+              placeholderTextColor={theme.subText}
+              value={importJsonInput}
+              onChangeText={setImportJsonInput}
+              multiline={true}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.border }]} onPress={() => setReceiveModalVisible(false)}>
+                <Text style={{ color: theme.text, fontWeight: 'bold' }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary }]} onPress={handleImportJSONText}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Importar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* MODAL COMPARTILHAR WHATSAPP */}
       <Modal visible={shareModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Enviar Lista JSON via WhatsApp</Text>
-            <Text style={styles.label}>Escolha para quem deseja enviar:</Text>
+          <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Compartilhar Lista de Compras</Text>
+            <Text style={[styles.label, { color: theme.subText }]}>Escolha o destinatário:</Text>
 
-            <TouchableOpacity style={styles.contactBtn} onPress={() => handleSendWhatsApp('48988045622')}>
-              <Text style={styles.contactBtnText}>Enviar para Bruno (48 98804-5622)</Text>
+            <TouchableOpacity style={[styles.contactBtn, { backgroundColor: theme.border }]} onPress={() => handleSendWhatsApp('48988045622')}>
+              <Text style={{ color: theme.text, fontWeight: 'bold', textAlign: 'center' }}>Enviar para Bruno (48 98804-5622)</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.contactBtn} onPress={() => handleSendWhatsApp('49999450974')}>
-              <Text style={styles.contactBtnText}>Enviar para Fernanda (49 99945-0974)</Text>
+            <TouchableOpacity style={[styles.contactBtn, { backgroundColor: theme.border }]} onPress={() => handleSendWhatsApp('49999450974')}>
+              <Text style={{ color: theme.text, fontWeight: 'bold', textAlign: 'center' }}>Enviar para Fernanda (49 99945-0974)</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn, { width: '100%', marginTop: 10 }]} onPress={() => setShareModalVisible(false)}>
-              <Text style={styles.btnText}>Cancelar</Text>
+            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.border, width: '100%', marginTop: 10 }]} onPress={() => setShareModalVisible(false)}>
+              <Text style={{ color: theme.text, fontWeight: 'bold', textAlign: 'center' }}>Cancelar</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL EDITAR LANÇAMENTO DO HISTÓRICO */}
+      <Modal visible={editCalcModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Editar Lançamento</Text>
+
+            <Text style={[styles.label, { color: theme.subText }]}>Operação:</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+              <TouchableOpacity style={[styles.actionBtn, { width: '48%', backgroundColor: editCalcType === 'ADD' ? theme.add : theme.border }]} onPress={() => setEditCalcType('ADD')}>
+                <Text style={styles.actionBtnText}>+ Adição</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, { width: '48%', backgroundColor: editCalcType === 'SUB' ? theme.sub : theme.border }]} onPress={() => setEditCalcType('SUB')}>
+                <Text style={styles.actionBtnText}>- Subtração</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.label, { color: theme.subText }]}>Valor:</Text>
+            <TextInput style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border }]} keyboardType="numeric" value={editCalcValue} onChangeText={setEditCalcValue} />
+
+            <Text style={[styles.label, { color: theme.subText }]}>Observação / Itens:</Text>
+            <TextInput style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border, minHeight: 60 }]} multiline value={editCalcNote} onChangeText={setEditCalcNote} />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: isDarkMode ? '#2A171A' : '#FEE2E2' }]} onPress={() => handleDeleteCalcItem(editingCalcItem?.id)}>
+                <Text style={{ color: theme.sub, fontWeight: 'bold' }}>Excluir</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary }]} onPress={handleSaveEditCalcItem}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -548,24 +667,24 @@ export default function App() {
       {/* MODAL EDITAR ITEM DA LISTA DE COMPRAS */}
       <Modal visible={editShopModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Item da Lista</Text>
+          <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Editar Item da Lista</Text>
 
-            <Text style={styles.label}>Nome do Item:</Text>
-            <TextInput style={styles.modalInput} value={editShopName} onChangeText={setEditShopName} />
+            <Text style={[styles.label, { color: theme.subText }]}>Nome do Item:</Text>
+            <TextInput style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border }]} value={editShopName} onChangeText={setEditShopName} />
 
-            <Text style={styles.label}>Quantidade:</Text>
-            <TextInput style={styles.modalInput} keyboardType="numeric" value={editShopQty} onChangeText={setEditShopQty} />
+            <Text style={[styles.label, { color: theme.subText }]}>Quantidade:</Text>
+            <TextInput style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border }]} keyboardType="numeric" value={editShopQty} onChangeText={setEditShopQty} />
 
-            <Text style={styles.label}>Valor Unitário (R$):</Text>
-            <TextInput style={styles.modalInput} keyboardType="numeric" placeholder="0,00" value={editShopPrice} onChangeText={setEditShopPrice} />
+            <Text style={[styles.label, { color: theme.subText }]}>Valor Unitário (R$):</Text>
+            <TextInput style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border }]} keyboardType="numeric" placeholder="0,00" value={editShopPrice} onChangeText={setEditShopPrice} />
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setEditShopModalVisible(false)}>
-                <Text style={styles.btnText}>Cancelar</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.border }]} onPress={() => setEditShopModalVisible(false)}>
+                <Text style={{ color: theme.text, fontWeight: 'bold' }}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.confirmBtn]} onPress={handleSaveEditShopItem}>
-                <Text style={styles.btnText}>Salvar</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary }]} onPress={handleSaveEditShopItem}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Salvar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -575,15 +694,15 @@ export default function App() {
       {/* MODAL CRIAR HISTÓRICO */}
       <Modal visible={groupModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Novo Histórico</Text>
-            <TextInput style={styles.modalInput} placeholder="Nome" value={newGroupName} onChangeText={setNewGroupName} />
+          <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Novo Histórico</Text>
+            <TextInput style={[styles.modalInput, { backgroundColor: theme.bg, color: theme.text, borderColor: theme.border }]} placeholder="Nome do histórico" placeholderTextColor={theme.subText} value={newGroupName} onChangeText={setNewGroupName} />
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setGroupModalVisible(false)}>
-                <Text style={styles.btnText}>Cancelar</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.border }]} onPress={() => setGroupModalVisible(false)}>
+                <Text style={{ color: theme.text, fontWeight: 'bold' }}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.confirmBtn]} onPress={() => setGroupModalVisible(false)}>
-                <Text style={styles.btnText}>Criar</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary }]} onPress={handleCreateGroup}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Criar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -594,83 +713,65 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D12', paddingTop: 40 },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#16161E', marginHorizontal: 12, borderRadius: 14, padding: 4, marginBottom: 10 },
+  container: { flex: 1, paddingTop: 40 },
+  topHeader: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 12, marginBottom: 10 },
+  tabContainer: { flex: 1, flexDirection: 'row', borderRadius: 14, padding: 4, borderWidth: 1, marginRight: 8 },
   tabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  activeTabButton: { backgroundColor: '#232330' },
-  tabText: { color: '#5A5A72', fontWeight: '600', fontSize: 13 },
-  activeTabText: { color: '#6C5CE7' },
+  tabText: { fontWeight: '600', fontSize: 13 },
+  themeToggleBtn: { padding: 10, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
 
   calcView: { paddingHorizontal: 16, paddingBottom: 20 },
-  infoBadge: { alignSelf: 'flex-end', backgroundColor: '#16161E', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginBottom: 10 },
-  infoBadgeText: { color: '#8E8EA0', fontSize: 12 },
-  infoBadgeHighlight: { color: '#6C5CE7', fontWeight: 'bold' },
-  noteInput: { backgroundColor: '#16161E', color: '#FFF', padding: 12, borderRadius: 12, fontSize: 13, marginBottom: 8, borderWidth: 1, borderColor: '#232330' },
-  
-  importJsonBtn: { backgroundColor: '#232330', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#6C5CE7' },
-  importJsonBtnText: { color: '#6C5CE7', fontWeight: 'bold', fontSize: 12 },
+  infoBadge: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginBottom: 10 },
+  infoBadgeText: { fontSize: 12 },
+  noteInput: { padding: 12, borderRadius: 12, fontSize: 13, marginBottom: 10, borderWidth: 1 },
 
-  displayContainer: { backgroundColor: '#16161E', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#232330', minHeight: 75, justifyContent: 'center' },
-  displayText: { color: '#FFF', fontSize: 34, textAlign: 'right', fontWeight: '600' },
+  displayContainer: { padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, minHeight: 75, justifyContent: 'center' },
+  displayText: { fontSize: 34, textAlign: 'right', fontWeight: '600' },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   actionBtn: { width: '48%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  addBtn: { backgroundColor: '#10B981' },
-  subBtn: { backgroundColor: '#EF4444' },
   actionBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   keypad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  button: { width: '22%', backgroundColor: '#16161E', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
-  buttonText: { color: '#E4E4E8', fontSize: 22, fontWeight: '500' },
-  opButton: { backgroundColor: '#232330' },
-  opButtonText: { color: '#6C5CE7', fontWeight: 'bold' },
-  clearButton: { backgroundColor: '#2A171A' },
-  clearButtonText: { color: '#EF4444' },
-  equalButton: { width: '48%', backgroundColor: '#6C5CE7' },
-  equalButtonText: { color: '#FFF', fontWeight: 'bold' },
+  button: { width: '22%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1 },
+  buttonText: { fontSize: 22, fontWeight: '500' },
 
   historyView: { flex: 1, paddingHorizontal: 16 },
+  shoppingActionHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  importJsonBtn: { paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  shareBtn: { backgroundColor: '#25D366', paddingHorizontal: 10, paddingVertical: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  shareBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textAlign: 'center' },
+
   shopForm: { flexDirection: 'row', marginBottom: 12, alignItems: 'center' },
-  addShopItemBtn: { backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  shareBtn: { backgroundColor: '#25D366', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  shareBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+  addShopItemBtn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 
-  contactBtn: { backgroundColor: '#232330', padding: 14, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#25D366' },
-  contactBtnText: { color: '#FFF', fontWeight: 'bold', textAlign: 'center' },
+  contactBtn: { padding: 14, borderRadius: 10, marginBottom: 10 },
 
-  createGroupBtn: { backgroundColor: '#6C5CE7', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
+  createGroupBtn: { padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
   createGroupBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-  sectionLabel: { color: '#8E8EA0', fontSize: 12, marginBottom: 8 },
-  groupChip: { backgroundColor: '#16161E', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, height: 36, justifyContent: 'center', borderWidth: 1, borderColor: '#232330' },
-  activeGroupChip: { backgroundColor: '#6C5CE7', borderColor: '#6C5CE7' },
-  chipText: { color: '#8E8EA0', fontWeight: '600', fontSize: 13 },
-  activeChipText: { color: '#FFF' },
+  sectionLabel: { fontSize: 12, marginBottom: 8 },
+  groupChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, height: 36, justifyContent: 'center', borderWidth: 1 },
+  chipText: { fontWeight: '600', fontSize: 13 },
 
-  totalCard: { backgroundColor: '#16161E', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: '#232330' },
-  totalLabel: { color: '#8E8EA0', fontSize: 12 },
-  totalValue: { color: '#10B981', fontSize: 24, fontWeight: 'bold', marginTop: 2 },
+  totalCard: { padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1 },
+  totalLabel: { fontSize: 12 },
+  totalValue: { fontSize: 24, fontWeight: 'bold', marginTop: 2 },
 
-  itemCard: { backgroundColor: '#16161E', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#232330' },
+  itemCard: { padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 8, borderWidth: 1 },
   itemType: { fontSize: 16, fontWeight: 'bold' },
-  addText: { color: '#10B981' },
-  subText: { color: '#EF4444' },
-  itemNote: { color: '#A0A0B2', fontSize: 13, marginTop: 4 },
 
   itemActions: { flexDirection: 'row', marginLeft: 8 },
-  editBtn: { backgroundColor: '#232330', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 6 },
-  editBtnText: { color: '#8E8EA0', fontSize: 11, fontWeight: '600' },
-  deleteBtn: { backgroundColor: '#2A171A', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  deleteBtnText: { color: '#EF4444', fontSize: 11, fontWeight: '600' },
+  editBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 6 },
+  editBtnText: { fontSize: 11, fontWeight: '600' },
+  deleteBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  deleteBtnText: { fontSize: 11, fontWeight: '600' },
 
   emptyContainer: { alignItems: 'center', marginTop: 30 },
-  emptyText: { color: '#5A5A72', fontStyle: 'italic' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#16161E', width: '85%', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#232330' },
-  modalTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 14 },
-  label: { color: '#8E8EA0', fontSize: 12, marginBottom: 6 },
-  modalInput: { backgroundColor: '#0D0D12', color: '#FFF', padding: 12, borderRadius: 10, marginBottom: 14, borderWidth: 1, borderColor: '#232330' },
+  modalContent: { width: '85%', padding: 20, borderRadius: 16, borderWidth: 1 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 14 },
+  label: { fontSize: 12, marginBottom: 6 },
+  modalInput: { padding: 12, borderRadius: 10, marginBottom: 14, borderWidth: 1 },
   modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   modalBtn: { padding: 12, borderRadius: 10, width: '48%', alignItems: 'center' },
-  cancelBtn: { backgroundColor: '#232330' },
-  confirmBtn: { backgroundColor: '#6C5CE7' },
   btnText: { color: '#FFF', fontWeight: 'bold' }
 });
