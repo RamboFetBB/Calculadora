@@ -1,0 +1,41 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Configurar Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Instalar EAS CLI e dependências
+        run: |
+          npm install -g eas-cli
+          npm install
+
+      - name: Gerar build com Expo Prebuild / Gradle
+        run: |
+          npx expo prebuild --platform android
+          cd android && ./gradlew assembleRelease
+
+      - name: Salvar o arquivo APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Calculadora-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
