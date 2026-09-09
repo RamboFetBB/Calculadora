@@ -5,6 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#121212"
+    },
     "android": {
       "package": "com.rambofetbb.calculadora"
     }
