@@ -8,14 +8,15 @@ import {
   FlatList,
   Modal,
   Alert,
-  ScrollView
+  ScrollView,
+  StatusBar
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('calc'); // 'calc' | 'history'
+  const [activeTab, setActiveTab] = useState('calc');
   const [display, setDisplay] = useState('');
-  const [note, setNote] = useState(''); // Observação do novo cálculo
+  const [note, setNote] = useState('');
   const [historyGroups, setHistoryGroups] = useState([]);
   const [activeGroupId, setActiveGroupId] = useState(null);
 
@@ -24,10 +25,10 @@ export default function App() {
   const [newGroupName, setNewGroupName] = useState('');
 
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState(null); // Item sendo editado
+  const [editingItem, setEditingItem] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [editNote, setEditNote] = useState('');
-  const [editType, setEditType] = useState('ADD'); // 'ADD' ou 'SUB'
+  const [editType, setEditType] = useState('ADD');
 
   useEffect(() => {
     loadData();
@@ -67,7 +68,6 @@ export default function App() {
     setNote('');
   };
 
-  // Calcular o resultado da expressão
   const evaluateExpression = () => {
     if (!display.trim()) return null;
     try {
@@ -84,7 +84,6 @@ export default function App() {
     }
   };
 
-  // Salvar um cálculo (Soma ou Subtração)
   const handleSaveCalculation = (type = 'ADD') => {
     const calculatedValue = evaluateExpression();
     if (calculatedValue === null) {
@@ -97,7 +96,7 @@ export default function App() {
     const newItem = {
       id: Date.now().toString(),
       value: Math.abs(calculatedValue),
-      type: type, // 'ADD' ou 'SUB'
+      type: type,
       note: note.trim() || 'Sem observação',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       date: new Date().toLocaleDateString('pt-BR')
@@ -119,10 +118,9 @@ export default function App() {
     const formattedResult = calculatedValue.toString().replace('.', ',');
     setDisplay(formattedResult);
     setNote('');
-    Alert.alert('Sucesso', `Cálculo (${type === 'ADD' ? '+' : '-'}) registrado no histórico!`);
+    Alert.alert('Salvo!', `Cálculo (${type === 'ADD' ? '+' : '-'}) registrado com sucesso.`);
   };
 
-  // Calcular total acumulado de um grupo
   const getGroupTotal = (group) => {
     if (!group || !group.items) return 0;
     return group.items.reduce((acc, item) => {
@@ -130,7 +128,6 @@ export default function App() {
     }, 0);
   };
 
-  // Selecionar grupo do histórico e carregar total na calculadora
   const selectGroupAndPullTotal = (group) => {
     setActiveGroupId(group.id);
     const total = getGroupTotal(group);
@@ -138,13 +135,11 @@ export default function App() {
     setActiveTab('calc');
   };
 
-  // Puxar item específico de volta para a calculadora
   const pullSpecificValue = (value) => {
     setDisplay(value.toString().replace('.', ','));
     setActiveTab('calc');
   };
 
-  // Criar Novo Grupo de Histórico
   const handleCreateGroup = () => {
     const trimmed = newGroupName.trim();
     if (!trimmed) {
@@ -174,7 +169,6 @@ export default function App() {
     setGroupModalVisible(false);
   };
 
-  // Excluir Grupo Inteiro
   const deleteGroup = (id) => {
     if (historyGroups.length <= 1) {
       Alert.alert('Aviso', 'Você precisa manter pelo menos um histórico ativo.');
@@ -188,7 +182,6 @@ export default function App() {
     saveData(updated);
   };
 
-  // ABRIR MODAL DE EDIÇÃO DE ITEM
   const openEditModal = (item) => {
     setEditingItem(item);
     setEditValue(item.value.toString().replace('.', ','));
@@ -197,7 +190,6 @@ export default function App() {
     setEditModalVisible(true);
   };
 
-  // SALVAR EDIÇÃO DO ITEM
   const handleSaveEdit = () => {
     const parsedValue = parseFloat(editValue.replace(',', '.'));
     if (isNaN(parsedValue)) {
@@ -229,7 +221,6 @@ export default function App() {
     setEditingItem(null);
   };
 
-  // EXCLUIR ITEM ESPECÍFICO DO HISTÓRICO
   const handleDeleteItem = (itemId) => {
     const updatedGroups = historyGroups.map((group) => {
       if (group.id === activeGroupId) {
@@ -248,7 +239,9 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      {/* Menu Superior de Abas */}
+      <StatusBar barStyle="light-content" backgroundColor="#0D0D12" />
+
+      {/* Navegação Topo */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'calc' && styles.activeTabButton]}
@@ -268,50 +261,54 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      {/* ABA 1: CALCULADORA */}
+      {/* ABA CALCULADORA */}
       {activeTab === 'calc' && (
-        <ScrollView contentContainerStyle={styles.calcView}>
-          <Text style={styles.activeGroupTag}>
-            Histórico Ativo: <Text style={{ color: '#ff9500', fontWeight: 'bold' }}>{activeGroup?.name || 'Geral'}</Text>
-          </Text>
+        <ScrollView contentContainerStyle={styles.calcView} showsVerticalScrollIndicator={false}>
+          {/* Card de Informação */}
+          <View style={styles.infoBadge}>
+            <Text style={styles.infoBadgeText}>
+              Lançando em: <Text style={styles.infoBadgeHighlight}>{activeGroup?.name || 'Geral'}</Text>
+            </Text>
+          </View>
 
-          {/* Campo de Observação do Cálculo */}
+          {/* Campo de Observação */}
           <TextInput
             style={styles.noteInput}
-            placeholder="Adicionar observação ao cálculo (opcional)..."
-            placeholderTextColor="#777"
+            placeholder="Observação (ex: Peça A, Serviço)..."
+            placeholderTextColor="#5A5A72"
             value={note}
             onChangeText={setNote}
           />
 
+          {/* Display da Calculadora */}
           <View style={styles.displayContainer}>
             <TextInput
               style={styles.displayText}
               value={display}
               onChangeText={setDisplay}
               placeholder="0"
-              placeholderTextColor="#555"
+              placeholderTextColor="#2E2E3A"
               keyboardType="numeric"
             />
           </View>
 
-          {/* Botoes de Ação Direta (+ Salvar / - Subtrair do Histórico) */}
+          {/* Botões de Ação (+ Somar / - Subtrair) */}
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#28a745' }]}
+              style={[styles.actionBtn, styles.addBtn]}
               onPress={() => handleSaveCalculation('ADD')}
             >
               <Text style={styles.actionBtnText}>+ Somar no Histórico</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#dc3545' }]}
+              style={[styles.actionBtn, styles.subBtn]}
               onPress={() => handleSaveCalculation('SUB')}
             >
               <Text style={styles.actionBtnText}>- Subtrair no Histórico</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Teclado Numerico */}
+          {/* Teclado Customizado */}
           <View style={styles.keypad}>
             {[
               'C', '÷', '×', '-',
@@ -320,7 +317,7 @@ export default function App() {
               '1', '2', '3', ',',
               '0', '='
             ].map((char) => {
-              const isOp = ['+', '-', '×', '÷', '='].includes(char);
+              const isOp = ['+', '-', '×', '÷'].includes(char);
               const isClear = char === 'C';
               const isEqual = char === '=';
 
@@ -341,7 +338,14 @@ export default function App() {
                     } else handlePress(char);
                   }}
                 >
-                  <Text style={styles.buttonText}>{char}</Text>
+                  <Text style={[
+                    styles.buttonText,
+                    isOp && styles.opButtonText,
+                    isClear && styles.clearButtonText,
+                    isEqual && styles.equalButtonText
+                  ]}>
+                    {char}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -349,7 +353,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* ABA 2: HISTÓRICOS */}
+      {/* ABA HISTÓRICOS */}
       {activeTab === 'history' && (
         <View style={styles.historyView}>
           <TouchableOpacity
@@ -359,8 +363,8 @@ export default function App() {
             <Text style={styles.createGroupBtnText}>+ Criar Novo Histórico Nomeado</Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionLabel}>Selecione o Histórico:</Text>
-          <View style={{ maxHeight: 45, marginBottom: 10 }}>
+          <Text style={styles.sectionLabel}>Históricos disponíveis:</Text>
+          <View style={{ maxHeight: 42, marginBottom: 15 }}>
             <FlatList
               horizontal
               data={historyGroups}
@@ -382,45 +386,50 @@ export default function App() {
             />
           </View>
 
-          {/* Banner com Total Acumulado do Histórico */}
+          {/* Card Totalizador */}
           <View style={styles.totalCard}>
             <View>
-              <Text style={styles.totalLabel}>Total Acumulado ({activeGroup?.name}):</Text>
-              <Text style={styles.totalValue}>{activeTotal.toString().replace('.', ',')}</Text>
+              <Text style={styles.totalLabel}>Total em {activeGroup?.name}:</Text>
+              <Text style={styles.totalValue}>
+                R$ {activeTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </Text>
             </View>
             <TouchableOpacity
               style={styles.pullTotalBtn}
               onPress={() => selectGroupAndPullTotal(activeGroup)}
             >
-              <Text style={styles.pullTotalBtnText}>Carregar Total</Text>
+              <Text style={styles.pullTotalBtnText}>Usar Total</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Lista de Itens/Lançamentos do Histórico Ativo */}
+          {/* Lista de Lançamentos */}
           <View style={{ flex: 1 }}>
             <View style={styles.historyHeader}>
               <Text style={styles.historyTitle}>Lançamentos ({activeGroup?.items?.length || 0})</Text>
               <TouchableOpacity onPress={() => deleteGroup(activeGroup?.id)}>
-                <Text style={styles.deleteGroupText}>Excluir Histórico Inteiro</Text>
+                <Text style={styles.deleteGroupText}>Excluir Histórico</Text>
               </TouchableOpacity>
             </View>
 
             <FlatList
               data={activeGroup?.items || []}
               keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>Nenhum cálculo salvo neste histórico.</Text>
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>Nenhum cálculo neste histórico ainda.</Text>
+                </View>
               }
               renderItem={({ item }) => (
                 <View style={styles.itemCard}>
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Text style={[styles.itemType, item.type === 'SUB' ? styles.subText : styles.addText]}>
-                        {item.type === 'SUB' ? '-' : '+'} {item.value.toString().replace('.', ',')}
+                        {item.type === 'SUB' ? '-' : '+'} R$ {item.value.toString().replace('.', ',')}
                       </Text>
-                      <Text style={styles.itemDate}> ({item.date} {item.timestamp})</Text>
+                      <Text style={styles.itemDate}>• {item.timestamp}</Text>
                     </View>
-                    <Text style={styles.itemNote}>Obs: {item.note}</Text>
+                    <Text style={styles.itemNote}>{item.note}</Text>
                   </View>
 
                   <View style={styles.itemActions}>
@@ -428,14 +437,14 @@ export default function App() {
                       style={styles.editBtn}
                       onPress={() => openEditModal(item)}
                     >
-                      <Text style={styles.btnActionText}>Editar</Text>
+                      <Text style={styles.editBtnText}>Editar</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={styles.loadBtn}
                       onPress={() => pullSpecificValue(item.value)}
                     >
-                      <Text style={styles.btnActionText}>Usar</Text>
+                      <Text style={styles.loadBtnText}>Usar</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -445,52 +454,52 @@ export default function App() {
         </View>
       )}
 
-      {/* MODAL 1: CRIAR NOVO HISTÓRICO */}
+      {/* MODAL NOVO HISTÓRICO */}
       <Modal visible={groupModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Novo Histórico Nomeado</Text>
+            <Text style={styles.modalTitle}>Novo Histórico</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Ex: Alemão, Obra Casa, Ferramentas..."
-              placeholderTextColor="#888"
+              placeholder="Nome (ex: Peças, Reforma...)"
+              placeholderTextColor="#5A5A72"
               value={newGroupName}
               onChangeText={setNewGroupName}
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#444' }]}
+                style={[styles.modalBtn, styles.cancelBtn]}
                 onPress={() => setGroupModalVisible(false)}
               >
                 <Text style={styles.btnText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#ff9500' }]}
+                style={[styles.modalBtn, styles.confirmBtn]}
                 onPress={handleCreateGroup}
               >
-                <Text style={styles.btnText}>Criar / Abrir</Text>
+                <Text style={styles.btnText}>Criar</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* MODAL 2: EDITAR ITEM / LANÇAMENTO DO HISTÓRICO */}
+      {/* MODAL EDITAR LANÇAMENTO */}
       <Modal visible={editModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Editar Lançamento</Text>
 
-            <Text style={styles.label}>Tipo de Operação:</Text>
+            <Text style={styles.label}>Operação:</Text>
             <View style={styles.typeSelector}>
               <TouchableOpacity
-                style={[styles.typeBtn, editType === 'ADD' && { backgroundColor: '#28a745' }]}
+                style={[styles.typeBtn, editType === 'ADD' && styles.typeBtnAddActive]}
                 onPress={() => setEditType('ADD')}
               >
                 <Text style={styles.btnText}>+ Adição</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.typeBtn, editType === 'SUB' && { backgroundColor: '#dc3545' }]}
+                style={[styles.typeBtn, editType === 'SUB' && styles.typeBtnSubActive]}
                 onPress={() => setEditType('SUB')}
               >
                 <Text style={styles.btnText}>- Subtração</Text>
@@ -514,7 +523,7 @@ export default function App() {
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#dc3545' }]}
+                style={[styles.modalBtn, styles.deleteModalBtn]}
                 onPress={() => {
                   handleDeleteItem(editingItem.id);
                   setEditModalVisible(false);
@@ -524,7 +533,7 @@ export default function App() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#28a745' }]}
+                style={[styles.modalBtn, styles.confirmBtn]}
                 onPress={handleSaveEdit}
               >
                 <Text style={styles.btnText}>Salvar</Text>
@@ -538,61 +547,94 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212', paddingTop: 45 },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#1e1e1e', marginHorizontal: 15, borderRadius: 10, padding: 4 },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
-  activeTabButton: { backgroundColor: '#2a2a2a' },
-  tabText: { color: '#888', fontWeight: 'bold', fontSize: 16 },
-  activeTabText: { color: '#ff9500' },
-  calcView: { padding: 15 },
-  activeGroupTag: { color: '#aaa', fontSize: 14, marginBottom: 8, textAlign: 'right' },
-  noteInput: { backgroundColor: '#1e1e1e', color: '#fff', padding: 12, borderRadius: 8, marginBottom: 10 },
-  displayContainer: { backgroundColor: '#1e1e1e', padding: 20, borderRadius: 12, marginBottom: 12 },
-  displayText: { color: '#fff', fontSize: 36, textAlign: 'right' },
+  container: { flex: 1, backgroundColor: '#0D0D12', paddingTop: 40 },
+  
+  // Abas Topo
+  tabContainer: { flexDirection: 'row', backgroundColor: '#16161E', marginHorizontal: 16, borderRadius: 14, padding: 4, marginBottom: 10 },
+  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
+  activeTabButton: { backgroundColor: '#232330' },
+  tabText: { color: '#5A5A72', fontWeight: '600', fontSize: 15 },
+  activeTabText: { color: '#6C5CE7' },
+
+  // Calculadora
+  calcView: { paddingHorizontal: 16, paddingBottom: 20 },
+  infoBadge: { alignSelf: 'flex-end', backgroundColor: '#16161E', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginBottom: 10 },
+  infoBadgeText: { color: '#8E8EA0', fontSize: 12 },
+  infoBadgeHighlight: { color: '#6C5CE7', fontWeight: 'bold' },
+  
+  noteInput: { backgroundColor: '#16161E', color: '#FFF', padding: 14, borderRadius: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
+  displayContainer: { backgroundColor: '#16161E', padding: 20, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#232330', minHeight: 90, justifyContent: 'center' },
+  displayText: { color: '#FFF', fontSize: 38, textAlign: 'right', fontWeight: '600' },
+
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  actionBtn: { width: '48%', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  actionBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  actionBtn: { width: '48%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  addBtn: { backgroundColor: '#10B981' },
+  subBtn: { backgroundColor: '#EF4444' },
+  actionBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+
+  // Teclado
   keypad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  button: { width: '22%', backgroundColor: '#2a2a2a', paddingVertical: 18, borderRadius: 10, alignItems: 'center', marginBottom: 12 },
-  opButton: { backgroundColor: '#ff9500' },
-  clearButton: { backgroundColor: '#dc3545' },
-  equalButton: { width: '48%', backgroundColor: '#28a745' },
-  buttonText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  historyView: { flex: 1, padding: 15 },
-  createGroupBtn: { backgroundColor: '#28a745', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 10 },
-  createGroupBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  sectionLabel: { color: '#aaa', fontSize: 12, marginBottom: 6 },
-  groupChip: { backgroundColor: '#2a2a2a', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, height: 36, justifyContent: 'center' },
-  activeGroupChip: { backgroundColor: '#ff9500' },
-  chipText: { color: '#ccc', fontWeight: 'bold' },
-  activeChipText: { color: '#fff' },
-  totalCard: { backgroundColor: '#1e1e1e', padding: 14, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#ff9500' },
-  totalLabel: { color: '#aaa', fontSize: 13 },
-  totalValue: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  pullTotalBtn: { backgroundColor: '#ff9500', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
-  pullTotalBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+  button: { width: '22%', backgroundColor: '#16161E', paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#232330' },
+  buttonText: { color: '#E4E4E8', fontSize: 22, fontWeight: '500' },
+  opButton: { backgroundColor: '#232330' },
+  opButtonText: { color: '#6C5CE7', fontWeight: 'bold' },
+  clearButton: { backgroundColor: '#2A171A' },
+  clearButtonText: { color: '#EF4444' },
+  equalButton: { width: '48%', backgroundColor: '#6C5CE7' },
+  equalButtonText: { color: '#FFF', fontWeight: 'bold' },
+
+  // Históricos
+  historyView: { flex: 1, paddingHorizontal: 16 },
+  createGroupBtn: { backgroundColor: '#6C5CE7', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
+  createGroupBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  sectionLabel: { color: '#8E8EA0', fontSize: 12, marginBottom: 8 },
+  
+  groupChip: { backgroundColor: '#16161E', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, height: 36, justifyContent: 'center', borderWidth: 1, borderColor: '#232330' },
+  activeGroupChip: { backgroundColor: '#6C5CE7', borderColor: '#6C5CE7' },
+  chipText: { color: '#8E8EA0', fontWeight: '600', fontSize: 13 },
+  activeChipText: { color: '#FFF' },
+
+  totalCard: { backgroundColor: '#16161E', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: '#232330' },
+  totalLabel: { color: '#8E8EA0', fontSize: 12 },
+  totalValue: { color: '#10B981', fontSize: 24, fontWeight: 'bold', marginTop: 2 },
+  pullTotalBtn: { backgroundColor: '#232330', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#3A3A4D' },
+  pullTotalBtnText: { color: '#6C5CE7', fontWeight: 'bold', fontSize: 12 },
+
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  historyTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  deleteGroupText: { color: '#dc3545', fontSize: 12 },
-  itemCard: { backgroundColor: '#1e1e1e', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  itemType: { fontSize: 18, fontWeight: 'bold' },
-  addText: { color: '#28a745' },
-  subText: { color: '#dc3545' },
-  itemDate: { color: '#666', fontSize: 12 },
-  itemNote: { color: '#ccc', fontSize: 13, marginTop: 2 },
+  historyTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  deleteGroupText: { color: '#EF4444', fontSize: 12 },
+
+  itemCard: { backgroundColor: '#16161E', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: '#232330' },
+  itemType: { fontSize: 16, fontWeight: 'bold' },
+  addText: { color: '#10B981' },
+  subText: { color: '#EF4444' },
+  itemDate: { color: '#5A5A72', fontSize: 11 },
+  itemNote: { color: '#A0A0B2', fontSize: 13, marginTop: 2 },
+  
   itemActions: { flexDirection: 'row' },
-  editBtn: { backgroundColor: '#007bff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 5, marginRight: 5 },
-  loadBtn: { backgroundColor: '#ff9500', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 5 },
-  btnActionText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  emptyText: { color: '#666', fontStyle: 'italic', marginTop: 20, textAlign: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#222', width: '85%', padding: 20, borderRadius: 12 },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  label: { color: '#aaa', fontSize: 12, marginBottom: 4 },
-  modalInput: { backgroundColor: '#333', color: '#fff', padding: 10, borderRadius: 6, marginBottom: 12 },
+  editBtn: { backgroundColor: '#232330', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 6 },
+  editBtnText: { color: '#8E8EA0', fontSize: 11, fontWeight: '600' },
+  loadBtn: { backgroundColor: '#6C5CE7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  loadBtnText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+
+  emptyContainer: { alignItems: 'center', marginTop: 30 },
+  emptyText: { color: '#5A5A72', fontStyle: 'italic' },
+
+  // Modais
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: '#16161E', width: '85%', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#232330' },
+  modalTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 14 },
+  label: { color: '#8E8EA0', fontSize: 12, marginBottom: 6 },
+  modalInput: { backgroundColor: '#0D0D12', color: '#FFF', padding: 12, borderRadius: 10, marginBottom: 14, borderWidth: 1, borderColor: '#232330' },
   modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  modalBtn: { padding: 12, borderRadius: 6, width: '48%', alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: 'bold' },
-  typeSelector: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  typeBtn: { width: '48%', padding: 10, borderRadius: 6, alignItems: 'center', backgroundColor: '#333' }
+  modalBtn: { padding: 12, borderRadius: 10, width: '48%', alignItems: 'center' },
+  cancelBtn: { backgroundColor: '#232330' },
+  confirmBtn: { backgroundColor: '#6C5CE7' },
+  deleteModalBtn: { backgroundColor: '#EF4444' },
+  btnText: { color: '#FFF', fontWeight: 'bold' },
+
+  typeSelector: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  typeBtn: { width: '48%', padding: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#0D0D12', borderWidth: 1, borderColor: '#232330' },
+  typeBtnAddActive: { backgroundColor: '#10B981', borderColor: '#10B981' },
+  typeBtnSubActive: { backgroundColor: '#EF4444', borderColor: '#EF4444' }
 });
